@@ -1,0 +1,18 @@
+# Tailscale Funnel Configuration for Production
+# Enable HTTPS tunneling to expose services via Tailscale
+
+{
+  "protocols": {
+    "tcp": {
+      "443": [
+        {
+          "backend": {
+            "host": "100.96.1.100",
+            "port": 443
+          },
+          "domain": "hollacrm-prod.tailnet-name.ts.net"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  tailscaled:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: ${TAILNET_HOSTNAME:-hrms-server}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_EXTRA_ARGS=--advertise-tags=tag:${TAILNET_ENV:-prod},tag:hr-server
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+    volumes:
+      - /dev/net/tun:/dev/net/tun
+      - tailscale-state:/var/lib/tailscale
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    restart: unless-stopped
+    network_mode: host
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: horilla
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-postgres}"]
+    network_mode: service:tailscaled
+    restart: unless-stopped
+
+  horilla:
+    image: horilla/horilla:1.4
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/horilla
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${TAILNET_IP:-100.64.0.1}
+    volumes:
+      - horilla-media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    network_mode: service:tailscaled
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+      - horilla-media:/app/media:ro
+    network_mode: service:tailscaled
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  horilla-media:
+  tailscale-state:
